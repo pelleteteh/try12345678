@@ -179,3 +179,46 @@ app.use((req, res, next) => {
     }
   );
 })();
+
+// -------------------------------------------------------------------
+// Serverless export
+// -------------------------------------------------------------------
+
+export async function initAppForServerless() {
+  // Telegram bot (safe in production)
+  const telegramBot = createTelegramBot();
+  if (telegramBot) {
+    await telegramBot.testConnection();
+  }
+
+  // Routes
+  const server = await registerRoutes(app, upload);
+  addAuthTestRoutes(app);
+
+  // Initialize database
+  try {
+    await initializeDatabase();
+  } catch (err) {
+    console.error("❌ Failed to initialize database:", err);
+  }
+
+  // Notification service
+  const { storage } = await import("./storage");
+  const notificationAlgorithm = new NotificationAlgorithmService(storage);
+  notificationAlgorithm.startNotificationScheduler();
+
+  // Seed admin users
+  try {
+    await seedAdmin();
+  } catch (err) {
+    console.error("❌ Failed to seed admin users:", err);
+  }
+
+  // Global error handler
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    const status = err.status || err.statusCode || 500;
+    res.status(status).json({ message: err.message || "Internal Server Error" });
+  });
+
+  return app;
+}
